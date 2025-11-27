@@ -3,6 +3,21 @@ import chromadb
 from chromadb.utils import embedding_functions
 import json
 from pprint import pprint
+from pypdf import PdfReader
+
+def read_pdf(path: str) -> str:
+    """
+    Read PDF file and return its full text
+    """
+    reader = PdfReader(path)
+    text = ""
+    
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            text += page_text 
+
+    return text
 
 def build_careers_index():
     chroma_client = chromadb.PersistentClient(path="chromadb_data/")
@@ -25,28 +40,28 @@ def build_careers_index():
 
     for c in careers:
         text_block = f"""
-Title: {c['title']}
-Category: {c['category']}
-Seniority: {c['seniority']}
+                Title: {c['title']}
+                Category: {c['category']}
+                Seniority: {c['seniority']}
 
-Summary: {c['summary']}
+                Summary: {c['summary']}
 
-Ideal background: {c['ideal_background']}
+                Ideal background: {c['ideal_background']}
 
-Core skills: {', '.join(c['core_skills'])}
-Nice to have skills: {', '.join(c['nice_to_have_skills'])}
+                Core skills: {', '.join(c['core_skills'])}
+                Nice to have skills: {', '.join(c['nice_to_have_skills'])}
 
-Interests fit: {', '.join(c['interests_fit'])}
-Personality fit: {', '.join(c['personality_fit'])}
+                Interests fit: {', '.join(c['interests_fit'])}
+                Personality fit: {', '.join(c['personality_fit'])}
 
-Typical tasks: {', '.join(c['typical_tasks'])}
+                Typical tasks: {', '.join(c['typical_tasks'])}
 
-Common job titles: {', '.join(c['common_job_titles'])}
+                Common job titles: {', '.join(c['common_job_titles'])}
 
-Suggested learning paths: {', '.join(c['suggested_learning_paths'])}
+                Suggested learning paths: {', '.join(c['suggested_learning_paths'])}
 
-Tags: {', '.join(c['tags'])}
-"""
+                Tags: {', '.join(c['tags'])}
+                """
         documents.append(text_block)
         metadatas.append({
             "id": c["id"],
@@ -104,6 +119,7 @@ def retrieve_careers(profile_text: str, k: int = 5):
             "raw_text": doc
         })
 
+
     return career_results
 
 
@@ -111,12 +127,10 @@ def retrieve_careers(profile_text: str, k: int = 5):
 if __name__ == "__main__":
     # 🔹 Only run this the first time or when careers.json changes
     # build_careers_index()
-
-    profile_text = """
-    Computer science student with strong skills in Python, machine learning, and data visualization.
-    Experience in building ML models, working with pandas and scikit-learn, and creating dashboards.
-    Interested in AI, data science, and solving analytical problems.
-    """
-
+    resume_path="data/resumes/samaShalabiCV(AI).pdf"
+    profile_text = read_pdf(resume_path)
+    # print(profile_text)
     results = retrieve_careers(profile_text, k=5)
-    pprint(results)
+    for c in results:
+        print(f"- {c['title']} ({c['category']}, {c['seniority']})")
+
