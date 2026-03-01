@@ -2,4 +2,3 @@
 eval_app.py
 .env
 __pycache__/
-chroma_db

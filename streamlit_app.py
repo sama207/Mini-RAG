@@ -1,222 +1,54 @@
 import os
 import re
 import json
+import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import hashlib
 
 import streamlit as st
-import requests
 import chromadb
 from chromadb.utils import embedding_functions
+from dotenv import load_dotenv
 
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
-# -----------------------------
-# Chroma: connect + retrieve
-# -----------------------------
-@st.cache_resource
-def get_chroma_collection(persist_dir: str, collection_name: str, embedding_model: str):
-    client = chromadb.PersistentClient(path=persist_dir)
-    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=embedding_model
-    )
-    return client.get_or_create_collection(
-        name=collection_name,
-        embedding_function=embed_fn,
-        metadata={"description": f"Collection for {collection_name}"},
-    )
+from src.indexers.chroma_indexer import ChromaIndexer
 
+# Optional helpers for ingesting uploaded CVs
+try:
+    from docx import Document as DocxDocument
+except Exception:
+    DocxDocument = None
 
-def retrieve_chunks(collection, query: str, k: int = 40, where: Optional[Dict[str, Any]] = None):
-    return collection.query(query_texts=[query], n_results=k, where=where)
-
-
-# -----------------------------
-# Prompt building (Recruitment)
-# -----------------------------
-def build_context_with_meta(docs: List[str], metas: List[Dict[str, Any]], max_chars: int = 16000) -> str:
-    parts = []
-    for doc, meta in zip(docs, metas):
-        file_name = meta.get("file_name", "unknown")
-        chunk_id = meta.get("chunk_id", "unknown")
-        parts.append(f'[file_name="{file_name}" chunk_id={chunk_id}]\n{doc}')
-    joined = "\n\n---\n\n".join(parts)
-    return joined[:max_chars]
-
-
-def build_recruitment_messages(
-    context: str,
-    question: str,
-    role_title: str,
-    must_have: List[str],
-    nice_to_have: List[str],
-    seniority: str = "any",
-    job_notes: str = "",
-    top_n: int = 5,
-):
-    system_prompt = (
-        "You are a technical recruitment assistant.\n\n"
-        "Goal:\n"
-        "Given a job/project requirement and resume evidence retrieved from multiple candidates, "
-        "rank the best candidates.\n\n"
-        "Rules:\n"
-        "- Use ONLY the provided resume evidence (context). Do NOT invent skills, experience, or education.\n"
-        "- Every claim MUST be backed by evidence and include file_name + chunk_id.\n"
-        "- If something is not found in the evidence, say 'not found'.\n"
-        "- Be fair: do not assume years of experience unless explicitly stated.\n"
-        "- Output ONLY valid JSON (no markdown, no extra text)."
-    )
-
-    user_prompt = f"""
-Job requirements:
-Role title: {role_title}
-Must-have skills: {must_have}
-Nice-to-have skills: {nice_to_have}
-Seniority: {seniority}
-Notes: {job_notes}
-
-Recruitment question:
-{question}
-
-Resume evidence (retrieved chunks across multiple candidates):
-{context}
-
-Task:
-Rank the best candidates for this role.
-Return top {top_n} candidates (or fewer if evidence is weak).
-
-Every score and claim MUST cite evidence with file_name and chunk_id.
-
-Return ONLY JSON with this schema:
-{{
-  "job": {{
-    "role_title": "string",
-    "must_have": ["string"],
-    "nice_to_have": ["string"],
-    "seniority": "intern/junior/mid/senior/any",
-    "notes": "string"
-  }},
-  "ranked_candidates": [
-    {{
-      "file_name": "string",
-      "overall_score": 0,
-      "score_breakdown": {{
-        "skills_match": 0,
-        "project_relevance": 0,
-        "experience_level": 0,
-        "communication_clarity": 0
-      }},
-      "highlights": ["string"],
-      "gaps": ["string"],
-      "evidence": [
-        {{
-          "file_name": "string",
-          "chunk_id": 0,
-          "snippet": "string",
-          "why_it_matters": "string"
-        }}
-      ],
-      "recommendation": "strong_interview / interview / maybe / no",
-      "targeted_interview_questions": ["string"]
-    }}
-  ],
-  "final_notes": {{
-    "missing_info": ["string"],
-    "tie_breakers_used": ["string"]
-  }}
-}}
-""".strip()
-
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-
-
-# -----------------------------
-# OpenRouter
-# -----------------------------
-def openrouter_chat_completion(
-    messages: List[Dict[str, str]],
-    model: str = "meta-llama/llama-3.1-8b-instruct",
-    temperature: float = 0.2,
-    max_tokens: int = 900,
-    timeout: int = 60,
-) -> str:
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("Missing OPENROUTER_API_KEY environment variable")
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-
-    r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=timeout)
-
-    if r.status_code != 200:
-        try:
-            err = r.json()
-        except Exception:
-            err = {"raw_text": r.text}
-        raise RuntimeError(f"OpenRouter error {r.status_code}\n{json.dumps(err, indent=2)}")
-
-    data = r.json()
-    return data["choices"][0]["message"]["content"]
-
-
-# -----------------------------
-# JSON extraction
-# -----------------------------
-def extract_json(text: str) -> dict:
-    """
-    Robust JSON extractor:
-    1. Try direct json.loads
-    2. Extract the largest {...} block
-    3. Retry after cleanup
-    """
-    if not text:
-        raise ValueError("Empty LLM output")
-
-    text = text.strip()
-
-    # 1) Direct parse
+try:
+    # pypdf is the modern successor of PyPDF2
+    from pypdf import PdfReader
+except Exception:
     try:
-        return json.loads(text)
+        from PyPDF2 import PdfReader  # type: ignore
     except Exception:
-        pass
+        PdfReader = None
 
-    # 2) Extract first JSON object
-    match = re.search(r"\{[\s\S]*\}", text)
-    if not match:
-        raise ValueError("No JSON object found in LLM output")
+try:
+    from src.chunkers.paragraph_chunker import ParagraphChunker
+except Exception:
+    ParagraphChunker = None
 
-    candidate = match.group(0)
+load_dotenv()
 
-    # 3) Cleanup common issues
-    candidate = candidate.replace("“", '"').replace("”", '"')
-    candidate = candidate.replace("‘", "'").replace("’", "'")
-
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError as e:
-        # Show helpful debug info
-        raise ValueError(
-            f"JSON parsing failed after extraction.\n"
-            f"Error: {e}\n\n"
-            f"Extracted JSON:\n{candidate}"
-        )
 
 # -----------------------------
-# Optional: load file_name list (for filter)
+# Helpers (UI input handling)
 # -----------------------------
+def parse_csv_list(s: str) -> List[str]:
+    return [x.strip() for x in (s or "").split(",") if x.strip()]
+
+
 def load_file_names(cvs_json_path: str) -> List[str]:
     p = Path(cvs_json_path)
     if not p.exists():
@@ -226,33 +58,350 @@ def load_file_names(cvs_json_path: str) -> List[str]:
     return sorted({d.get("file_name") for d in docs if d.get("file_name")})
 
 
-def parse_csv_list(s: str) -> List[str]:
-    return [x.strip() for x in (s or "").split(",") if x.strip()]
+def extract_text_from_uploaded_file(file_name: str, file_bytes: bytes) -> str:
+    """Extract text from an uploaded CV (PDF/DOCX/TXT).
 
-def repair_json_with_llm(bad_json_text: str, model: str) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": "You fix JSON. Return ONLY valid JSON. No explanations.",
-        },
-        {
-            "role": "user",
-            "content": f"Fix this JSON and return only valid JSON:\n\n{bad_json_text}",
-        },
-    ]
-    return openrouter_chat_completion(
-        messages=messages,
-        model=model,
-        temperature=0,
-        max_tokens=800,
+    Notes:
+    - PDF extraction requires pypdf or PyPDF2.
+    - DOCX extraction requires python-docx.
+    """
+    lower = (file_name or "").lower()
+
+    if lower.endswith(".txt"):
+        return file_bytes.decode("utf-8", errors="ignore")
+
+    if lower.endswith(".docx"):
+        if DocxDocument is None:
+            raise RuntimeError("DOCX support is unavailable (python-docx not installed).")
+        doc = DocxDocument(BytesIO(file_bytes))
+        return "\n".join(p.text for p in doc.paragraphs if p.text and p.text.strip())
+
+    if lower.endswith(".pdf"):
+        if PdfReader is None:
+            raise RuntimeError(
+                "PDF support is unavailable (install 'pypdf' or 'PyPDF2')."
+            )
+        reader = PdfReader(BytesIO(file_bytes))
+        pages = []
+        for page in reader.pages:
+            try:
+                pages.append(page.extract_text() or "")
+            except Exception:
+                pages.append("")
+        return "\n".join(pages)
+
+    raise RuntimeError("Unsupported file type. Please upload PDF, DOCX, or TXT.")
+
+
+def simple_clean_text(text: str) -> str:
+    # Light cleanup to reduce weird whitespace from PDFs
+    text = re.sub(r"\s+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def chunk_text_for_indexing(text: str) -> List[str]:
+    """Chunk text using your ParagraphChunker if available, otherwise fallback."""
+    text = simple_clean_text(text)
+
+    if ParagraphChunker is not None:
+        chunker = ParagraphChunker(tokens_per_chunk=200, chunk_overlap=30)
+        chunks, _, _ = chunker.chunk_texts([text], [{"doc_id": "tmp", "file_name": "tmp"}])
+        # chunker.chunk_texts returns chunks already filtered/split
+        return [c for c in chunks if c and c.strip()]
+
+    # Fallback: split by paragraphs, then merge very small bits
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    out = []
+    buf = ""
+    for p in paras:
+        if len(buf) < 400:
+            buf = (buf + "\n\n" + p).strip()
+        else:
+            out.append(buf)
+            buf = p
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _text_fingerprint(text: str) -> str:
+    """Stable fingerprint for deduping CVs across uploads."""
+    normalized = re.sub(r"\s+", " ", (text or "").strip().lower())
+    return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _cv_already_indexed(indexer: ChromaIndexer, file_name: str, fingerprint: str) -> bool:
+    """
+    Detect duplicates using metadata already stored in Chroma.
+    We check both file_name AND content fingerprint, because file names can change.
+    """
+    # 1) Same file_name already indexed?
+    if file_name:
+        try:
+            res = indexer.collection.get(where={"file_name": file_name}, limit=1)
+            if res and res.get("ids"):
+                return True
+        except Exception:
+            try:
+                res = indexer.collection.get(where={"file_name": file_name})
+                if res and res.get("ids"):
+                    return True
+            except Exception:
+                pass
+
+    # 2) Same content already indexed?
+    if fingerprint:
+        try:
+            res = indexer.collection.get(where={"content_hash": fingerprint}, limit=1)
+            if res and res.get("ids"):
+                return True
+        except Exception:
+            try:
+                res = indexer.collection.get(where={"content_hash": fingerprint})
+                if res and res.get("ids"):
+                    return True
+            except Exception:
+                pass
+
+    return False
+
+
+def upsert_cv_into_collection(
+    indexer: ChromaIndexer,
+    file_name: str,
+    text: str,
+    source: str = "uploaded",
+) -> int:
+    """Chunk a CV and add it to the Chroma collection. Returns #chunks added.
+
+    If the CV is already in the DB (same file_name OR same content), we skip it.
+    """
+    fingerprint = _text_fingerprint(text)
+
+    # ✅ Dedup guard
+    if _cv_already_indexed(indexer, file_name=file_name, fingerprint=fingerprint):
+        return 0
+
+    doc_id = str(uuid.uuid4())
+    chunks = chunk_text_for_indexing(text)
+    if not chunks:
+        raise RuntimeError("No text could be extracted / chunked from this file.")
+
+    metadatas: List[Dict[str, Any]] = []
+    ids: List[str] = []
+    for i, _chunk in enumerate(chunks):
+        metadatas.append(
+            {
+                "doc_id": doc_id,
+                "file_name": file_name,
+                "source": source,
+                "chunk_id": i,
+                "chunk_type": "paragraph",
+                "content_hash": fingerprint,
+            }
+        )
+        ids.append(f"{doc_id}_par_{i}")
+
+    indexer.add_chunks(chunks=chunks, metadatas=metadatas, chunk_ids=ids)
+    return len(chunks)
+
+def append_to_cvs_json(cvs_json_path: str, file_name: str, text: str) -> None:
+    """Optional: keep CVs.json in sync so your file_name filter sees new uploads."""
+    p = Path(cvs_json_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    existing = []
+    if p.exists():
+        with p.open("r", encoding="utf-8") as f:
+            try:
+                existing = json.load(f) or []
+            except Exception:
+                existing = []
+    new_item = {
+        "id": str(uuid.uuid4()),
+        "file_name": file_name,
+        "text": text,
+        "source": "uploaded",
+    }
+    existing.append(new_item)
+    with p.open("w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
+
+
+# -----------------------------
+# Chroma: connect + retrieve
+# -----------------------------
+@st.cache_resource
+def get_chroma_indexer(persist_dir: str, collection_name: str, embedding_model: str):
+    return ChromaIndexer(
+        collection_name=collection_name,
+        embedding_model=embedding_model,
+        persist_directory=persist_dir,
+        client_type="persistent",
     )
 
 
+def retrieve_chunks(
+    indexer: ChromaIndexer,
+    query: str,
+    k: int = 40,
+    where: Optional[Dict[str, Any]] = None,
+):
+    # ChromaIndexer.search returns same shape as collection.query
+    return indexer.search(query=query, n_results=k, where=where)
+
+
+def build_context_with_meta(
+    docs: List[str],
+    metas: List[Dict[str, Any]],
+    max_chars: int = 16000,
+) -> str:
+    parts = []
+    for doc, meta in zip(docs, metas):
+        file_name = meta.get("file_name", "unknown")
+        chunk_id = meta.get("chunk_id", "unknown")
+        parts.append(f'[file_name="{file_name}" chunk_id={chunk_id}]\n{doc}')
+    joined = "\n\n---\n\n".join(parts)
+    return joined[:max_chars]
+
+
 # -----------------------------
-# Streamlit UI
+# Prompt building (Recruitment chatbot)
 # -----------------------------
-st.set_page_config(page_title="Recruitment RAG (Functional)", layout="wide")
-st.title("Recruitment RAG – Candidate Ranking (Functional Streamlit)")
+
+RECRUITMENT_SYSTEM_PROMPT = (
+    "You are a technical recruitment helper chatbot.\n\n"
+    "Your job:\n"
+    "- Answer questions about candidates using ONLY the provided resume evidence (context).\n"
+    "- Help with recruiting tasks like:\n"
+    "  * finding candidates with specific skills\n"
+    "  * recommending the best candidate for a role\n"
+    "  * comparing candidates\n\n"
+    "Rules (critical):\n"
+    "- Use ONLY the provided context. Do NOT invent skills, experience, education, or names.\n"
+    "- Every claim MUST be backed by evidence, citing file_name and chunk_id.\n"
+    "- If evidence is missing, say: 'not found in the provided resumes'.\n"
+    "- Be fair: do not assume years of experience unless explicitly stated.\n"
+    "- Prefer clear, structured answers:\n"
+    "  * If asked 'best candidate', provide a ranked shortlist and explain why.\n"
+    "  * If asked 'who has skill X', list candidates and cite evidence.\n"
+    "  * If asked general questions, answer briefly and cite.\n"
+    "- Output in normal text (NO JSON required)."
+)
+
+
+def build_recruitment_user_prompt(
+    context: str,
+    user_question: str,
+    conversation_summary: str = "",
+) -> str:
+    user_prompt = f"""
+Conversation summary (may help you keep context):
+{conversation_summary}
+
+Question:
+{user_question}
+
+Retrieved resume evidence (context):
+{context}
+
+Answer now. Remember: cite evidence as (file_name, chunk_id).
+""".strip()
+
+    # Keep your conditional prefix behavior exactly.
+    if conversation_summary.strip():
+        user_prompt = f"Conversation summary:\n{conversation_summary}\n\n" + user_prompt
+
+    return user_prompt
+
+
+# ChatPromptTemplate: produces messages for the model in a consistent way.
+RECRUITMENT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", RECRUITMENT_SYSTEM_PROMPT),
+        ("human", "{user_prompt}"),
+    ]
+)
+
+
+# -----------------------------
+# OpenRouter via LangChain init_chat_model
+# -----------------------------
+@st.cache_resource
+def initialize_models(
+    name: str,
+    provider: str,
+    base_url: str,
+    api_key: str,
+    default_headers: Dict[str, str],
+    temperature: float,
+    max_tokens: int,
+    timeout: int,
+):
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not set")
+
+    return init_chat_model(
+        model=name,
+        model_provider=provider,
+        base_url=base_url,
+        api_key=api_key,
+        default_headers=default_headers,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+
+
+def openrouter_chat_completion(
+    prompt: ChatPromptTemplate,
+    prompt_inputs: Dict[str, Any],
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: int = 60,
+) -> str:
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("Missing OPENROUTER_API_KEY environment variable")
+
+    base_url = "https://openrouter.ai/api/v1"
+    default_headers = {
+        "HTTP-Referer": "http://localhost:8501",
+        "X-Title": "Recruitment-RAG",
+    }
+
+    model_instance = initialize_models(
+        name=model,
+        provider="openai",
+        base_url=base_url,
+        api_key=api_key,
+        default_headers=default_headers,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+
+    chain = prompt | model_instance | StrOutputParser()
+
+    try:
+        content = chain.invoke(prompt_inputs)
+    except Exception as e:
+        raise RuntimeError(f"LLM call failed: {e}")
+
+    if not content or not str(content).strip():
+        raise RuntimeError(
+            "Model returned empty output. Try increasing max tokens or reducing context size."
+        )
+
+    return content
+
+
+# -----------------------------
+# Streamlit UI (Chatbot)
+# -----------------------------
+st.set_page_config(page_title="Recruitment RAG Chatbot", layout="wide")
+st.title("Recruitment Helper Chatbot (RAG)")
 
 with st.sidebar:
     st.header("Chroma Settings")
@@ -262,14 +411,20 @@ with st.sidebar:
 
     st.divider()
     st.header("Retrieval")
-    k = st.slider("Top K chunks", 5, 120, 40, 5)
+    # default is k=25 
+    k = st.slider("Top K chunks", 5, 120, 25, 40)
+    # default is max_chars=16000
     max_chars = st.slider("Max context chars", 4000, 24000, 16000, 1000)
 
     st.divider()
-    st.header("LLM (locked cheap)")
-    model = st.text_input("OpenRouter model", value="meta-llama/llama-3.1-8b-instruct")
-    temperature = st.slider("temperature", 0.0, 1.0, 0.2, 0.05)
-    max_tokens = st.slider("max_tokens", 200, 2000, 900, 50)
+    st.header("LLM (tuning for now)")
+    model = st.text_input("OpenRouter model", value="openai/gpt-5-mini")
+    # default is temperature=0.3
+    temperature = st.slider("temperature", 0.0, 1.0, 0.3, 0.05)
+    # default is max_tokens=4500
+    max_tokens = st.slider("max tokens", 500, 8000, 4500, 2500)
+    # default is timeout=60
+    timeout = st.slider("timeout (sec)", 10, 180, 60, 5)
 
     st.divider()
     st.header("Optional CV filter")
@@ -277,29 +432,22 @@ with st.sidebar:
     use_filter = st.checkbox("Filter retrieval by one file_name", value=False)
 
     st.divider()
-    top_n = st.slider("Return top N candidates", 1, 10, 5, 1)
+    st.header("Add a new CV to the index")
+    uploaded_cv = st.file_uploader(
+        "Upload a CV (PDF/DOCX/TXT)",
+        type=["pdf", "docx", "txt"],
+    )
+    save_to_cvs_json = st.checkbox(
+        "Also append it to CVs.json (enables file_name filter)",
+        value=True,
+    )
+    ingest_clicked = st.button("Chunk + add to collection")
 
+    st.divider()
+    debug_show_chunks = st.checkbox("Show retrieved chunks (debug)", value=False)
+    debug_show_context = st.checkbox("Show context text (debug)", value=False)
 
-# Job inputs
-st.subheader("Job Requirements")
-
-col1, col2 = st.columns(2)
-with col1:
-    role_title = st.text_input("Role title", value="Backend Developer")
-    seniority = st.selectbox("Seniority", ["any", "intern", "junior", "mid", "senior"], index=0)
-with col2:
-    must_have_str = st.text_input("Must-have (comma-separated)", value="Python, Django, REST APIs")
-    nice_to_have_str = st.text_input("Nice-to-have (comma-separated)", value="PostgreSQL, Docker, CI/CD")
-
-job_notes = st.text_area("Job notes (optional)", value="Prefer real projects and clean API design.", height=80)
-
-st.subheader("Recruitment Question")
-question = st.text_input("Question", value="Who is the best candidate for this backend role?")
-
-must_have = parse_csv_list(must_have_str)
-nice_to_have = parse_csv_list(nice_to_have_str)
-
-# Filter selection
+# optional file filter
 where = None
 if use_filter:
     file_names = load_file_names(cvs_json_path)
@@ -310,80 +458,110 @@ if use_filter:
         st.warning("No file names found. Check CVs.json path.")
         where = None
 
-# Run
-st.divider()
-run = st.button("✨ Rank Candidates", type="primary")
+# Session state for chat
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "conversation_summary" not in st.session_state:
+    st.session_state.conversation_summary = ""  # keep it simple for now
 
-if run:
-    if not must_have:
-        st.error("Must-have list is empty. Add at least one skill.")
-        st.stop()
+# Render chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
+# Connect to Chroma collection
+collection = get_chroma_indexer(persist_dir, collection_name, embedding_model)
+
+# Handle CV ingestion (sidebar button)
+if ingest_clicked:
+    if uploaded_cv is None:
+        st.sidebar.error("Please upload a CV file first.")
+    else:
+        try:
+            file_name = uploaded_cv.name
+            file_bytes = uploaded_cv.getvalue()
+            raw_text = extract_text_from_uploaded_file(file_name, file_bytes)
+            cleaned_text = simple_clean_text(raw_text)
+
+            n_chunks = upsert_cv_into_collection(
+                indexer=collection,
+                file_name=file_name,
+                text=cleaned_text,
+                source="uploaded",
+            )
+            if n_chunks == 0:
+                st.sidebar.info(f"'{file_name}' is already indexed — skipped (no duplicates).")
+            else:
+                st.sidebar.success(f"Added {n_chunks} chunks from '{file_name}' to the collection.")
+                if save_to_cvs_json:
+                    append_to_cvs_json(cvs_json_path, file_name, cleaned_text)
+                st.sidebar.success(f"Added {n_chunks} chunks from '{file_name}' to the collection.")
+
+            # Refresh UI elements that depend on CVs.json (like the file_name filter list)
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Ingestion failed: {e}")
+
+# Chat input
+user_text = st.chat_input("Ask about candidates, skills, or best fit for a role...")
+
+if user_text:
+    # 1) show user message
+    st.session_state.messages.append({"role": "user", "content": user_text})
+    with st.chat_message("user"):
+        st.markdown(user_text)
+
+    raw_answer = ""
     try:
-        collection = get_chroma_collection(persist_dir, collection_name, embedding_model)
-        results = retrieve_chunks(collection, question, k=k, where=where)
+        # 2) retrieve
+        results = retrieve_chunks(collection, user_text, k=k, where=where)
 
         docs = results.get("documents", [[]])[0] if results else []
         metas = results.get("metadatas", [[]])[0] if results else []
         dists = results.get("distances", [[]])[0] if results else []
 
         context = build_context_with_meta(docs, metas, max_chars=max_chars)
-        messages = build_recruitment_messages(
+
+        # 3) prompt + llm (ChatPromptTemplate + StrOutputParser)
+        user_prompt = build_recruitment_user_prompt(
             context=context,
-            question=question,
-            role_title=role_title,
-            must_have=must_have,
-            nice_to_have=nice_to_have,
-            seniority=seniority,
-            job_notes=job_notes,
-            top_n=top_n,
+            user_question=user_text,
+            conversation_summary=st.session_state.conversation_summary,
         )
 
-        raw = openrouter_chat_completion(
-            messages=messages,
+        raw_answer = openrouter_chat_completion(
+            prompt=RECRUITMENT_PROMPT,
+            prompt_inputs={"user_prompt": user_prompt},
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout=timeout,
         )
 
-        try:
-            parsed = extract_json(raw)
-        except Exception:
-            repaired = repair_json_with_llm(raw, model)
-            parsed = extract_json(repaired)
+        # 4) show assistant answer
+        st.session_state.messages.append({"role": "assistant", "content": raw_answer})
+        with st.chat_message("assistant"):
+            st.markdown(raw_answer)
 
-        # attach retrieval trace
-        parsed["_retrieval_trace"] = {
-            "k": k,
-            "query": question,
-            "sources": sorted({m.get("file_name") for m in metas if m.get("file_name")}),
-        }
+        # 5) debug
+        if debug_show_context:
+            st.subheader("Context (debug)")
+            st.text_area("context", context, height=250)
 
-        st.success("Done ✅")
-        st.subheader("Ranked candidates (JSON)")
-        st.json(parsed)
-
-        st.subheader("Retrieved chunks preview")
-        for i, (doc, meta, dist) in enumerate(zip(docs, metas, dists), start=1):
-            st.markdown(f"### Rank {i}  | distance: `{dist:.4f}`")
-            st.caption(f'file_name: {meta.get("file_name")} | chunk_id: {meta.get("chunk_id")}')
-            st.write(doc)
-            st.divider()
+        if debug_show_chunks:
+            st.subheader("Retrieved chunks (debug)")
+            for i, (doc, meta, dist) in enumerate(zip(docs, metas, dists), start=1):
+                st.markdown(f"**Rank {i}** | distance: `{dist:.4f}`")
+                st.caption(
+                    f'file_name: {meta.get("file_name")} | chunk_id: {meta.get("chunk_id")}'
+                )
+                st.write(doc)
+                st.divider()
 
     except Exception as e:
-        st.error("Failed while parsing model output.")
-        st.code(str(e))
-
-        st.subheader("Raw LLM output (debug)")
-        st.text_area(
-            "Raw response",
-            value=raw if "raw" in locals() else "No raw output",
-            height=300,
-        )
-
-        st.info(
-            "Check:\n"
-            "- OPENROUTER_API_KEY is set\n"
-            "- chroma_db path exists\n"
-            "- collection name is correct\n"
-        )
+        err_msg = f"Error: {e}"
+        st.session_state.messages.append({"role": "assistant", "content": err_msg})
+        with st.chat_message("assistant"):
+            st.error(err_msg)
+            if raw_answer:
+                st.text_area("Raw model output (debug)", raw_answer, height=200)
