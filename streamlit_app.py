@@ -5,7 +5,6 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import hashlib
 
 import streamlit as st
 import chromadb
@@ -125,64 +124,13 @@ def chunk_text_for_indexing(text: str) -> List[str]:
     return out
 
 
-def _text_fingerprint(text: str) -> str:
-    """Stable fingerprint for deduping CVs across uploads."""
-    normalized = re.sub(r"\s+", " ", (text or "").strip().lower())
-    return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest()
-
-
-def _cv_already_indexed(indexer: ChromaIndexer, file_name: str, fingerprint: str) -> bool:
-    """
-    Detect duplicates using metadata already stored in Chroma.
-    We check both file_name AND content fingerprint, because file names can change.
-    """
-    # 1) Same file_name already indexed?
-    if file_name:
-        try:
-            res = indexer.collection.get(where={"file_name": file_name}, limit=1)
-            if res and res.get("ids"):
-                return True
-        except Exception:
-            try:
-                res = indexer.collection.get(where={"file_name": file_name})
-                if res and res.get("ids"):
-                    return True
-            except Exception:
-                pass
-
-    # 2) Same content already indexed?
-    if fingerprint:
-        try:
-            res = indexer.collection.get(where={"content_hash": fingerprint}, limit=1)
-            if res and res.get("ids"):
-                return True
-        except Exception:
-            try:
-                res = indexer.collection.get(where={"content_hash": fingerprint})
-                if res and res.get("ids"):
-                    return True
-            except Exception:
-                pass
-
-    return False
-
-
 def upsert_cv_into_collection(
     indexer: ChromaIndexer,
     file_name: str,
     text: str,
     source: str = "uploaded",
 ) -> int:
-    """Chunk a CV and add it to the Chroma collection. Returns #chunks added.
-
-    If the CV is already in the DB (same file_name OR same content), we skip it.
-    """
-    fingerprint = _text_fingerprint(text)
-
-    # ✅ Dedup guard
-    if _cv_already_indexed(indexer, file_name=file_name, fingerprint=fingerprint):
-        return 0
-
+    """Chunk a CV and add it to the Chroma collection. Returns #chunks added."""
     doc_id = str(uuid.uuid4())
     chunks = chunk_text_for_indexing(text)
     if not chunks:
@@ -190,7 +138,7 @@ def upsert_cv_into_collection(
 
     metadatas: List[Dict[str, Any]] = []
     ids: List[str] = []
-    for i, _chunk in enumerate(chunks):
+    for i, chunk in enumerate(chunks):
         metadatas.append(
             {
                 "doc_id": doc_id,
@@ -198,13 +146,13 @@ def upsert_cv_into_collection(
                 "source": source,
                 "chunk_id": i,
                 "chunk_type": "paragraph",
-                "content_hash": fingerprint,
             }
         )
         ids.append(f"{doc_id}_par_{i}")
 
     indexer.add_chunks(chunks=chunks, metadatas=metadatas, chunk_ids=ids)
     return len(chunks)
+
 
 def append_to_cvs_json(cvs_json_path: str, file_name: str, text: str) -> None:
     """Optional: keep CVs.json in sync so your file_name filter sees new uploads."""
@@ -489,14 +437,11 @@ if ingest_clicked:
                 text=cleaned_text,
                 source="uploaded",
             )
-            if n_chunks == 0:
-                st.sidebar.info(f"'{file_name}' is already indexed — skipped (no duplicates).")
-            else:
-                st.sidebar.success(f"Added {n_chunks} chunks from '{file_name}' to the collection.")
-                if save_to_cvs_json:
-                    append_to_cvs_json(cvs_json_path, file_name, cleaned_text)
-                st.sidebar.success(f"Added {n_chunks} chunks from '{file_name}' to the collection.")
 
+            if save_to_cvs_json:
+                append_to_cvs_json(cvs_json_path, file_name, cleaned_text)
+
+            st.sidebar.success(f"Added {n_chunks} chunks from '{file_name}' to the collection.")
             # Refresh UI elements that depend on CVs.json (like the file_name filter list)
             st.rerun()
         except Exception as e:

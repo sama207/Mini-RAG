@@ -1,161 +1,215 @@
+# Recruitment RAG System -- Resume Search & Evaluation
 
-# Career Recommendation System (Retrieval-Augmented Generation)
+This project implements a full Retrieval-Augmented Generation (RAG)
+pipeline for resume search, chunking evaluation, indexing with ChromaDB,
+and an interactive Streamlit recruitment chatbot.
 
-## Overview
-This project implements the **retrieval component** of a Retrieval-Augmented Generation (RAG) pipeline.
-It focuses on **semantic document retrieval and evaluation**, enabling accurate search over large collections
-of resumes (CVs) and career-related documents.
+The system includes:
 
-The system indexes documents using vector embeddings and compares multiple **chunking strategies**
-to analyze their impact on retrieval quality.
+-   Resume preprocessing
+-   Paragraph-based chunking pipeline
+-   ChromaDB vector indexing
+-   Retrieval evaluation utilities
+-   Streamlit recruitment chatbot UI
+-   OpenRouter LLM integration
 
-> ⚠️ Note  
-> This repository focuses on **retrieval and evaluation only**.  
-> It does **not** include LLM-based response generation or chat interfaces.
+------------------------------------------------------------------------
 
----
+# 📁 Project Structure
 
-## Key Features
-- Semantic search over CVs and PDF documents
-- Multiple chunking strategies:
-  - Paragraph-based chunking
-  - Semantic chunking
-  - KamradtModifiedChunker
-- Vector similarity search using **ChromaDB**
-- Dense embeddings via **SentenceTransformers (MiniLM-L6-v2)**
-- Quantitative evaluation using IR metrics:
-  - Precision
-  - Mean Average Precision (MAP)
-  - nDCG
+    main.py                  → Builds & indexes resume chunks into ChromaDB
+    streamlit_app.py         → Recruitment RAG chatbot (UI)
+    evaluate_chunking.py     → Evaluation utilities
+    src/                     → Core pipeline (chunkers, indexers, preprocessors)
+    data/                    → CVs + QA + queries
+    chroma_db/               → Persistent ChromaDB (already included)
 
----
+------------------------------------------------------------------------
 
-## Tech Stack
-- **Python 3.9+**
-- SentenceTransformers
-- ChromaDB (Vector Database)
-- Pandas, NumPy
-- scikit-learn
-- PyPDF
+# 🧠 How The System Works
 
----
+1.  CVs are loaded from `data/CVs.json`
+2.  They are chunked using the ParagraphChunker
+3.  Chunks are embedded and indexed into ChromaDB
+4.  The Streamlit app retrieves relevant chunks
+5.  The LLM answers using ONLY retrieved resume evidence
 
-## Installation
-Clone the repository and install dependencies:
+------------------------------------------------------------------------
 
-```bash
-pip install chromadb pandas pypdf sentence-transformers scikit-learn numpy
+# 🛠 Requirements
+
+-   Python 3.9+
+-   OpenRouter API Key
+
+------------------------------------------------------------------------
+
+# 📦 Installation
+
+From the project root:
+
+``` bash
+python -m venv venv
 ```
 
----
+Activate:
 
-## ⚡ Quick Start (Recommended)
+**Windows**
 
-This project is a **pipeline**, not a single script.  
-Follow the steps below **in order** to run and test the system correctly.
-
-### Step 1: Prepare the Dataset
-You may use either:
-- A Kaggle resume dataset (CSV format), or
-- Your own directory of PDF resumes
-
-**Kaggle Dataset Requirements**
-- File: `UpdatedResumeDataSet.csv`
-- Required column: `Resume`
-
-Place the dataset under:
-```
-data/resumes/
+``` bash
+venv\Scripts\activate
 ```
 
----
+**Mac/Linux**
 
-### Step 2: Build the Corpus
-Convert resumes into a structured JSON corpus:
-
-```python
-build_kaggle_resume_corpus(
-    input_csv_path="data/resumes/UpdatedResumeDataSet.csv",
-    output_json_path="data/careers.json",
-    text_column="Resume"
-)
+``` bash
+source venv/bin/activate
 ```
 
----
+Install dependencies:
 
-### Step 3: Index Documents in ChromaDB
-Choose **one** chunking strategy.
-
-**Semantic Chunking**
-```python
-build_pdfs_index_from_json(
-    json_path="data/careers.json",
-    collection_name="pdf_semantic"
-)
+``` bash
+pip install -r requirements.txt
 ```
 
-**Paragraph-Based Chunking**
-```python
-build_pdfs_index_paragraph_from_json(
-    json_path="data/careers.json",
-    collection_name="pdf_paragraph"
-)
+------------------------------------------------------------------------
+
+# 🔐 Environment Variable
+
+Create a `.env` file in the root:
+
+    OPENROUTER_API_KEY=your_openrouter_key_here
+
+This is required for the Streamlit chatbot.
+
+------------------------------------------------------------------------
+
+# ⚙️ IMPORTANT: How To Run The Project Correctly
+
+There are TWO possible scenarios:
+
+------------------------------------------------------------------------
+
+## ✅ Scenario 1 --- Use Existing Indexed Database (Fastest)
+
+The project already includes a prebuilt `chroma_db/` folder.
+
+You can directly launch the chatbot:
+
+``` bash
+streamlit run streamlit_app.py
 ```
 
----
+Open:
 
-### Step 4: Run Retrieval
-Query the indexed documents:
+    http://localhost:8501
 
-```python
-retrieve_from_pdfs(
-    query_text="Python backend developer experience",
-    k=5,
-    collection_name="pdf_semantic"
-)
+No indexing needed.
+
+------------------------------------------------------------------------
+
+## 🔄 Scenario 2 --- Rebuild The Index (Optional)
+
+If you want to rebuild embeddings and re-index resumes:
+
+``` bash
+python main.py
 ```
 
----
+This will: - Load resumes from `data/CVs.json` - Chunk them - Create a
+ChromaDB collection (`paragraph_chunking`) - Store everything inside
+`./chroma_db`
 
-## Evaluation
-Retrieval quality is evaluated using standard Information Retrieval metrics:
+After indexing completes, launch the chatbot:
 
-- **Precision** – relevance of top-k retrieved documents
-- **MAP (Mean Average Precision)** – ranking quality across queries
-- **nDCG** – ranking usefulness considering position
-
-Chunking strategies are compared using identical query sets to ensure fairness.
-
----
-
-## Project Structure
-```
-.
-├── data/
-│   ├── resumes/
-│   └── careers.json
-├── indexing/
-├── retrieval/
-├── evaluation/
-├── utils/
-└── README.md
+``` bash
+streamlit run streamlit_app.py
 ```
 
----
+------------------------------------------------------------------------
 
-## Use Cases
-- Career recommendation systems
-- Resume semantic search
-- HR document retrieval
-- Academic research on chunking strategies in RAG pipelines
+# 🧪 Testing The Retrieval (Optional)
 
----
+`main.py` contains a search example inside the script.
 
-## Author
-**Sama Shalabi**  
-Junior AI Engineer  
+You can uncomment:
 
----
+``` python
+# search_example()
+```
 
-## License
-This project is provided for academic and educational purposes.
+to test retrieval from terminal.
+
+------------------------------------------------------------------------
+
+# 🎛 Streamlit Sidebar Settings
+
+When running the chatbot:
+
+-   persist_directory → `./chroma_db`
+-   collection_name → `paragraph_chunking`
+-   embedding_model → `all-mpnet-base-v2` (must match indexing model)
+-   OpenRouter model → e.g. `openai/gpt-5-mini`
+
+⚠️ If embedding_model does not match the one used during indexing,
+retrieval may fail.
+
+------------------------------------------------------------------------
+
+# 🛡 Grounding Rules
+
+The chatbot:
+
+-   Uses ONLY retrieved resume chunks
+-   Must cite (file_name, chunk_id)
+-   Does NOT hallucinate missing experience
+-   Returns "not found in the provided resumes" when evidence is missing
+
+------------------------------------------------------------------------
+
+# 🧩 Troubleshooting
+
+### ❌ Chroma Collection Not Found
+
+Run:
+
+``` bash
+python main.py
+```
+
+### ❌ Missing OPENROUTER_API_KEY
+
+Ensure `.env` exists in root folder.
+
+### ❌ Wrong Embedding Model
+
+Make sure Streamlit embedding_model matches the one used in `main.py`.
+
+------------------------------------------------------------------------
+
+# 🎓 Purpose
+
+This project demonstrates:
+
+-   Chunking strategy comparison
+-   Retrieval evaluation metrics
+-   Production-style RAG architecture
+-   Resume-based candidate ranking system
+
+------------------------------------------------------------------------
+
+# 🚀 Final Run Command (Correct Order)
+
+If database already exists:
+
+``` bash
+streamlit run streamlit_app.py
+```
+
+If rebuilding from scratch:
+
+``` bash
+python main.py
+streamlit run streamlit_app.py
+```
+
+Always run commands from the project root directory.

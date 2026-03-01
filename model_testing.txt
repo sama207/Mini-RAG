@@ -1,78 +1,88 @@
-Q : List all candidates mentioned in the resumes.
+Q: List all candidates mentioned in the resumes.
 
-A : Candidates (as identified from the provided resume files):
+A: Candidates mentioned in the provided resumes:
 
-O.AbuReesh — (O.AbuReesh - CV.pdf, chunk_id=3) (O.AbuReesh - CV.pdf, chunk_id=5)
-Sama Shalabi — (sama shalabi CV(AI) latest.pdf, chunk_id=1) (sama shalabi CV(AI) latest.pdf, chunk_id=5)
-Mohammad Sayeh — (Mohammad Sayeh resume.pdf, chunk_id=0)
-Ibrahim Khdair — (Ibrahim khdairCV .docx.pdf, chunk_id=5) (Ibrahim khdairCV(SW).pdf, chunk_id=4)
-Emad Daraghmeh — (Emad Daraghmeh CV.docx.pdf, chunk_id=0) (Emad Daraghmeh CV.docx.pdf, chunk_id=1)
-Toqa Asedah — (ToqaAsedahCV.pdf, chunk_id=2) (ToqaAsedahCV.pdf, chunk_id=3)
-Adham Mohammed Yaqoub — (Adham Yaqoub - CV.docx.pdf, chunk_id=0) (Adham Yaqoub - CV.docx.pdf, chunk_id
-What skills does the candidate mentioned in the resumes have?
+O.AbuReesh (O.AbuReesh - CV.pdf, chunk_id=5)
+Sama Shalabi (sama shalabi CV(AI) latest.pdf, chunk_id=1)
+Mohammad Sayeh (Mohammad Sayeh resume.pdf, chunk_id=0)
+Ibrahim Khdair (Ibrahim khdairCV .docx.pdf, chunk_id=5)
+Emad Daraghmeh (Emad Daraghmeh CV.docx.pdf, chunk_id=0)
+Toqa Asedah (ToqaAsedahCV.pdf, chunk_id=2)
+Adham Yaqoub (Adham Yaqoub - CV.docx.pdf, chunk_id=0)
+Gaith (Gaith Resume Template 2026.pdf, chunk_id=5)
+Resume file without an identifiable candidate name in the provided chunks:
 
-Assuming you mean the candidate in O.AbuReesh - CV.pdf, their skills (as stated in the resume) are:
-
-Technical / programming
-
-Node.js (O.AbuReesh - CV.pdf, chunk_id=6; chunk_id=5)
-React.js (O.AbuReesh - CV.pdf, chunk_id=6)
-Python (O.AbuReesh - CV.pdf, chunk_id=6)
-SQL (O.AbuReesh - CV.pdf, chunk_id=6)
-MongoDB (O.AbuReesh - CV.pdf, chunk_id=6; chunk_id=5)
-Git & GitHub (O.AbuReesh - CV.pdf, chunk_id=6)
-Data entry software/tools (data collection, insertion) (O.AbuReesh - CV.pdf, chunk_id=5)
-Machine learning / data
-
-Machine learning techniques (general) (O.AbuReesh - CV.pdf, chunk_id=6)
-Feature engineering (O.AbuReesh - CV.pdf, chunk_id=6)
-Data visualization (O.AbuReesh - CV.pdf, chunk_id=6)
-Word embeddings: GloVe, Word2Vec (O.AbuReesh - CV.pdf, chunk_id=3)
-ML algorithms: Random Forest, Support Vector Machine (O.AbuReesh - CV.pdf, chunk_id=3)
-Data analysis / investigating datasets (example: Netflix, Reuters) (O.AbuReesh - CV.pdf, chunk_id=5; chunk_id=3)
-Web / application development
-
-Implemented user authentication features (O.AbuReesh - CV.pdf, chunk_id=4)
-E-commerce system (Storify) participation (O.AbuReesh - CV.pdf, chunk_id=4)
-Implemented search-practice criteria to select/optimize opportunities (O.AbuReesh - CV.pdf, chunk_id=5)
-Other technical / IT
-
-Networking troubleshooting (O.AbuReesh - CV.pdf, chunk_id=6)
-Soft / professional
-
-Excellent communication skills (O.AbuReesh - CV.pdf, chunk_id=6)
-Teamwork and conflict resolution (O.AbuReesh - CV.pdf, chunk_id=4)
-Attention to detail and working under deadlines (data entry accuracy) (O.AbuReesh - CV.pdf, chunk_id=5)
-If you meant a different candidate from the provided resumes, tell me which one and I will extract their skills with citations.
+cv_training.pdf — candidate name not found in the provided resumes (cv_training.pdf, chunk_id=1).
 
 Q: What skills does the candidates mentioned in the resumes have?
 
-A: Below I list each candidate (by resume file) and the skills shown in the provided evidence. Each skill is cited to the file_name and chunk_id where it appears.
+A: Below I list each candidate found in the provided resumes and the skills stated for them (each skill claim is backed by the cited resume file and chunk).
 
-O.AbuReesh (O.AbuReesh - CV.pdf)
+O. AbuReesh
 
-Technical / programming: Node.js (node. js) (O.AbuReesh - CV.pdf, chunk_6); React.js (react. js) (O.AbuReesh - CV.pdf, chunk_6); Python (O.AbuReesh - CV.pdf, chunk_6); SQL (O.AbuReesh - CV.pdf, chunk_6); MongoDB (O.AbuReesh - CV.pdf, chunk_6).
-Machine learning / data: machine learning techniques, feature engineering, data visualization (O.AbuReesh - CV.pdf, chunk_6); applied word embedding techniques (GloVe, Word2Vec), Random Forest, Support Vector Machine (O.AbuReesh - CV.pdf, chunk_3).
-Other / work skills: Git & GitHub (git & github) (O.AbuReesh - CV.pdf, chunk_6); excellent communication skills (O.AbuReesh - CV.pdf, chunk_6); data entry / data collection (data entry, data collector) (O.AbuReesh - CV.pdf, chunk_5); user authentication (implemented auth features) (O.AbuReesh - CV.pdf, chunk_4).
-Ibrahim Khdair (Ibrahim khdairCV(SW).pdf)
+Programming / tools: Node.js, React.js, Python, SQL, MongoDB, Git & GitHub (O.AbuReesh - CV.pdf, chunk_id=6).
+Data / ML: machine learning techniques, feature engineering, data visualization, word embeddings (GloVe, Word2Vec), algorithms (random forest, SVM) (O.AbuReesh - CV.pdf, chunk_id=3; O.AbuReesh - CV.pdf, chunk_id=6).
+Other: networking, troubleshooting, data entry / data collection (O.AbuReesh - CV.pdf, chunk_id=6; O.AbuReesh - CV.pdf, chunk_id=5).
+Ibrahim Khdair
 
-Programming languages: Python, JavaScript, C++, Java (Ibrahim khdairCV(SW).pdf, chunk_4).
-Frameworks / libs: Node.js, React, Express (Ibrahim khdairCV(SW).pdf, chunk_4).
-Databases: MySQL, MongoDB (Ibrahim khdairCV(SW).pdf, chunk_4).
-Tools / others: GitHub, Trello, Slack, Notion, Jira; design patterns & principles (Ibrahim khdairCV(SW).pdf, chunk_4).
-Ibrahim Khdair (alternate file) (Ibrahim khdairCV .docx.pdf)
+Programming languages: Python, JavaScript, C++, Java, (also listed: JavaFX, TypeScript, C#, PHP) (Ibrahim khdairCV(SW).pdf, chunk_id=4; Ibrahim khdairCV .docx.pdf, chunk_id=5).
+Frameworks / libraries: Node.js, React, Express, Laravel, Angular, ASP.NET Core, Django REST Framework (Ibrahim khdairCV(SW).pdf, chunk_id=4; Ibrahim khdairCV .docx.pdf, chunk_id=5).
+Databases: MySQL, MongoDB, SQL Server, PostgreSQL (Ibrahim khdairCV(SW).pdf, chunk_id=4; Ibrahim khdairCV .docx.pdf, chunk_id=5).
+Tools / others: GitHub, Trello, Slack, Notion, Jira, Figma, Postman, Swagger, Docker (basic), design patterns & principles (Ibrahim khdairCV(SW).pdf, chunk_id=4; Ibrahim khdairCV .docx.pdf, chunk_id=5).
+Mohammad Sayeh
 
-Programming languages: Java, JavaFX, JavaScript, TypeScript, C++, C#, PHP, Python (Ibrahim khdairCV .docx.pdf, chunk_5).
-Frameworks: Laravel, Angular, ASP.NET Core, React, Django REST Framework, Node.js (Ibrahim khdairCV .docx.pdf, chunk_5).
-Databases: MySQL, SQL Server, PostgreSQL (Ibrahim khdairCV .docx.pdf, chunk_5).
-Tools / others: GitHub, Trello, Slack, Figma, Postman, Swagger, Docker (basic), design patterns & principles (Ibrahim khdairCV .docx.pdf, chunk_5).
-Mohammad Sayeh (Mohammad Sayeh resume.pdf)
+Programming languages: C++, Python, C#, Scala (Mohammad Sayeh resume.pdf, chunk_id=2).
+Web / frontend: HTML, CSS, JavaScript (basic) (Mohammad Sayeh resume.pdf, chunk_id=2).
+Backend / frameworks / DBs: ASP.NET Core, Entity Framework, SQL Server, Elasticsearch (Mohammad Sayeh resume.pdf, chunk_id=2).
+Big data (basic): Apache Spark, Hadoop; Java EE / servlets / JSP / Struts training also noted (Mohammad Sayeh resume.pdf, chunk_id=2; Mohammad Sayeh resume.pdf, chunk_id=1).
+Sama Shalabi
 
-Programming languages: C++ (Mohammad Sayeh resume.pdf, chunk_1); C++, Python, C#, Scala (Mohammad Sayeh resume.pdf, chunk_2).
-Web / frontend: HTML, CSS, JavaScript (basic) (Mohammad Sayeh resume.pdf, chunk_2).
-Databases / backend / tools: SQL Server, Elasticsearch (Mohammad Sayeh resume.pdf, chunk_2); ASP.NET Core, Entity Framework (Mohammad Sayeh resume.pdf, chunk_2); Git, GitHub (Mohammad Sayeh resume.pdf, chunk_2).
-Big data (basic): Apache Spark, Hadoop (Mohammad Sayeh resume.pdf, chunk_2).
-Concepts: OOP, data
+Programming languages: Python, C++, HTML, CSS, JavaScript, Scala (sama shalabi CV(AI) latest.pdf, chunk_id=5).
+AI / ML / data libraries: LangChain, scikit-learn, OpenSearch, TensorFlow, Spark, Pandas, NumPy (sama shalabi CV(AI) latest.pdf, chunk_id=5).
+Web frameworks / backend: React.js, Node.js, Express, Bootstrap, Flask, Django (sama shalabi CV(AI) latest.pdf, chunk_id=5).
+Databases / vector DBs: SQL, MongoDB, ChromaDB (vector DB) (sama shalabi CV(AI) latest.pdf, chunk_id=5).
+Tools / infra: Git, GitHub, Slack, Trello; experience with Azure AI summarization and building RAG systems (sama shalabi CV(AI) latest.pdf, chunk_id=5; sama shalabi.pdf, chunk_id=0).
+Toqa Asedah
+
+Programming / languages: Python, SQL, C++, Scala, Assembly (ToqaAsedahCV.pdf, chunk_id=2).
+Big data / infra: Apache Spark, Hadoop, Kafka, Elasticsearch (ToqaAsedahCV.pdf, chunk_id=2).
+Full-stack / APIs: MERN stack, REST APIs, FastAPI, React (ToqaAsedahCV.pdf, chunk_id=2; ToqaAsedahCV.pdf, chunk_id=3).
+ML / AI: transfer learning, CNNs, transformers, DVC, information retrieval, machine learning model training and real-time inference (ToqaAsedahCV.pdf, chunk_id=2; ToqaAsedahCV.pdf, chunk_id=3).
+Tools / others: MongoDB, Azure DevOps exposure, n8n, LangChain, data analysis (ToqaAsedahCV.pdf, chunk_id=2; ToqaAsedahCV.pdf, chunk_id=3).
+Adham Yaqoub
+
+Frontend / frameworks: React.js (Adham Yaqoub - CV.docx.pdf, chunk_id=5).
+Data analysis: Python, Pandas, NumPy (data analysis nanodegree listed) (Adham Yaqoub - CV.docx.pdf, chunk_id=5).
+Full‑stack JavaScript training noted (Adham Yaqoub - CV.docx.pdf, chunk_id=5).
+Emad Daraghmeh
+
+Programming languages: C++, Scala, C#, intermediate Python (Emad Daraghmeh CV.docx.pdf, chunk_id=1).
+Data processing: tokenization, handling CSV/TXT/JSON files (Emad Daraghmeh CV.docx.pdf, chunk_id=1).
+Tools / IDEs: Git, Postman, IntelliJ IDEA, VSCode, Visual Studio; DBs: MySQL, Firebase, MongoDB (Emad Daraghmeh CV.docx.pdf, chunk_id=1).
+Web / backend: Blazor WebAssembly, C#, ASP.NET Core, MySQL (Emad Daraghmeh CV.docx.pdf, chunk_id=1).
+CV_training (unnamed candidate in cv_training.pdf)
+
+Proficient: Python, React, Git, SQL, NumPy, Pandas, frontend, JavaScript, Jupyter Notebooks, JSON, GitHub Actions, VS Code (cv_training.pdf, chunk_id=1).
+Familiar: Docker, TensorFlow, MongoDB, FastAPI (cv_training.pdf, chunk_id=1; cv_training.pdf, chunk_id=2).
+Backend Java training: Spring Boot, REST APIs, JPA/Hibernate (cv_training.pdf, chunk_id=4).
+Soft skills listed: problem solving, critical thinking, time management, team collaboration, communication, attention to detail (cv_training.pdf, chunk_id=2).
+Gaith (Gaith Resume Template 2026)
+
+Frontend / web: React, Next.js, Tailwind CSS (Gaith Resume Template 2026.pdf, chunk_id=3; Gaith Resume Template 2026.pdf, chunk_id=4).
+Backend / DB / architecture: MongoDB, microservices (Gaith Resume Template 2026.pdf, chunk_id=3; Gaith Resume Template 2026.pdf, chunk_id=4).
+Mobile / other: Flutter, Firebase (Gaith Resume Template 2026.pdf, chunk_id=4).
+Prompt engineering course completed (Gaith Resume Template 2026.pdf, chunk_id=5; Gaith Resume Template 2026.pdf, chunk_id=8).
+Baraa Sulaiby
+
+Programming languages: Python, C / C++, JavaScript (Baraa Sulaiby_Resume.pdf, chunk_id=1).
+Frameworks: Express.js, Node.js, Angular11; DBMS / NoSQL: MySQL, Oracle, MongoDB, Firebase (Baraa Sulaiby_Resume.pdf, chunk_id=1).
+Other: manual testing / QA experience, Xamarin and C# mobile app project (Baraa Sulaiby_Resume.pdf, chunk_id=1).
+If you want, I can:
+
+extract these into a table,
+filter candidates by specific skills (e.g., "who knows FastAPI" or "who has MongoDB experience"),
+or rank the candidates for a particular role (please specify the role and priority skills).
+
 
 2. Skill-based queries (core recruiter use case)
 Q: Who has experience with Python?

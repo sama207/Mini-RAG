@@ -1,4 +1,4 @@
 *.zip
-eval_app.py
 .env
 __pycache__/
+.vscode
